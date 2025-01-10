@@ -7,6 +7,8 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
+
 
 
 void main() {
@@ -46,6 +48,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool isRecording = false;
   String recordedFilePath = '';
   bool isPlaying = false;
+  bool isUploading = false;
 
   @override
   void initState() {
@@ -112,6 +115,49 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  Future<void> uploadAudioAndImage() async{
+    if(recordedFilePath.isEmpty || _image == null){
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("imagem ou audio não reconhecidos!"))
+      );
+      return;
+    }
+   
+    setState(() {
+      isUploading = true;
+    });
+
+    try {
+      final uri = Uri.parse('http://192.168.0.220:8000/object_img/');
+      var request = http.MultipartRequest('POST', uri)
+        ..files.add(await http.MultipartFile.fromPath('image',_image!.path))
+        ..files.add(await http.MultipartFile.fromPath('audio', recordedFilePath));
+
+        final response = await request.send();
+        if(response.statusCode == 201){
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Upload realizado com sucesso!")),
+          );
+        }
+        else{
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Erro no upload: ${response.statusCode}")),
+          );
+        }
+      
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erro ao enviar: $e")),
+      );
+      print(e);
+    }
+    finally {
+      setState(() {
+        isUploading = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
     recorder.closeRecorder();
@@ -170,14 +216,18 @@ class _MyHomePageState extends State<MyHomePage> {
                   ElevatedButton(
                     onPressed: isPlaying ? stopAudio : playAudio, 
                     child: Text(isPlaying ? 'Parar reprodução': 'Reproduzir áudio')
-                  )
+                  ),
+                  const SizedBox(height: 10,),
+
+                  ElevatedButton(
+                    onPressed: uploadAudioAndImage, 
+                    child: Text('Enviar!')
+                  ),
+
                 ],
               )
             :
             Container()
-
-
-
           ],
         ),
       ),
