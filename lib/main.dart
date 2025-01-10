@@ -123,6 +123,9 @@ class _MyHomePageState extends State<MyHomePage> {
     final XFile? image = await _picker.pickImage(source: ImageSource.camera);
     if(image !=null){
       _image = image;
+      setState(() {
+        _image = image;
+      });
     }
   }
 
@@ -157,7 +160,9 @@ class _MyHomePageState extends State<MyHomePage> {
               child: Text(isRecording ? 'Parar de gravação': 'Iniciar gravação'),
             ),
             const SizedBox(height: 20,),
-            if(recordedFilePath.isNotEmpty)
+            
+            recordedFilePath.isNotEmpty && isRecording == false 
+            ?
               Column(
                 children: [
                   Text("Áudio gravado:"),
@@ -168,6 +173,8 @@ class _MyHomePageState extends State<MyHomePage> {
                   )
                 ],
               )
+            :
+            Container()
 
 
 
