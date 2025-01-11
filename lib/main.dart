@@ -5,9 +5,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:image_picker/image_picker.dart';
+// import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
+import 'package:audioplayers/audioplayers.dart';
+// import 'package:just_audio/just_audio.dart';
 
 
 
@@ -49,6 +52,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String recordedFilePath = '';
   bool isPlaying = false;
   bool isUploading = false;
+  String downloadPath= '';
 
   @override
   void initState() {
@@ -96,6 +100,23 @@ class _MyHomePageState extends State<MyHomePage> {
     if(recordedFilePath.isNotEmpty){
       await player.startPlayer(
         fromURI: recordedFilePath,
+        whenFinished: (){
+          setState(() {
+            isPlaying = false;
+          });
+        }
+      );
+      setState(() {
+        isPlaying = true;
+      });
+
+    }
+  }
+
+  Future<void> playAudioDonwload() async {
+    if(recordedFilePath.isNotEmpty){
+      await player.startPlayer(
+        fromURI: downloadPath,
         whenFinished: (){
           setState(() {
             isPlaying = false;
@@ -169,6 +190,7 @@ class _MyHomePageState extends State<MyHomePage> {
           await downloadDirectory.create(recursive: true);
         }
         final filePath = '${downloadDirectory.path}/ai_response.mp3';
+        downloadPath = filePath;
 
         // salvando o arquivo no dispositivo
         final file = File(filePath);
@@ -177,6 +199,9 @@ class _MyHomePageState extends State<MyHomePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Áudio baixado com sucesso! Salvo em: $filePath')),
         );
+
+        final player = AudioPlayer();
+        await player.play(DeviceFileSource(filePath));
 
       }
       else{
@@ -265,12 +290,12 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: Text('Enviar!')
                   ),
                   ElevatedButton(
-  onPressed: () async {
-    const audioUrl = 'http://192.168.0.220:8000/media/ai_response/ai_response.mp3'; // Substitua pela URL correta do áudio retornado pela API.
-    await downloadAudio(audioUrl);
-  },
-  child: Text('Baixar Áudio'),
-),
+                    onPressed: () async {
+                        const audioUrl = 'http://192.168.0.220:8000/media/ai_response/ai_response.mp3'; // Substitua pela URL correta do áudio retornado pela API.
+                        await downloadAudio(audioUrl);
+                      },
+                      child: Text('Baixar Áudio'),
+                    ),
 
 
                 ],
