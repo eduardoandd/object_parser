@@ -77,10 +77,11 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> startRecording() async {
     final path = await getFilePath();
-    await recorder.startRecorder(toFile: path);
+    final wavPath = path.replaceAll('.aac', '.wav'); // Substitua a extensão por .wav
+    await recorder.startRecorder(toFile: wavPath, codec: Codec.pcm16WAV);
     setState(() {
       isRecording = true;
-      recordedFilePath = path;
+      recordedFilePath = wavPath;
     });
   }
 
@@ -158,6 +159,46 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  Future<void> downloadAudio(String audioUrl) async {
+    try {
+      final response = await http.get(Uri.parse(audioUrl));
+      if(response.statusCode ==200){
+        final directory = await getExternalStorageDirectory();
+        final downloadDirectory = Directory('${directory!.path}/Download');
+        if (!await downloadDirectory.exists()) {
+          await downloadDirectory.create(recursive: true);
+        }
+        final filePath = '${downloadDirectory.path}/ai_response.mp3';
+
+        // salvando o arquivo no dispositivo
+        final file = File(filePath);
+        await file.writeAsBytes(response.bodyBytes);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Áudio baixado com sucesso! Salvo em: $filePath')),
+        );
+
+      }
+      else{
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao baixar o áudio: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao processar o áudio: $e')),
+      );
+    }
+  }
+
+  Future<void> requestPermissions() async {
+  PermissionStatus status = await Permission.storage.request();
+  if (status.isDenied || status.isPermanentlyDenied) {
+    // Se negado, peça permissão manualmente
+    openAppSettings();
+  }
+}
+
   @override
   void dispose() {
     recorder.closeRecorder();
@@ -223,6 +264,14 @@ class _MyHomePageState extends State<MyHomePage> {
                     onPressed: uploadAudioAndImage, 
                     child: Text('Enviar!')
                   ),
+                  ElevatedButton(
+  onPressed: () async {
+    const audioUrl = 'http://192.168.0.220:8000/media/ai_response/ai_response.mp3'; // Substitua pela URL correta do áudio retornado pela API.
+    await downloadAudio(audioUrl);
+  },
+  child: Text('Baixar Áudio'),
+),
+
 
                 ],
               )
