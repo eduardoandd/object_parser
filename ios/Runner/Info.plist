@@ -18,6 +18,10 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>object_parser</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Precisamos usar o microfone para reconhecer sua voz</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Precisamos usar o reconhecimento de voz para detectar o que você fala</string>
 	<key>CFBundlePackageType</key>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Precisamos acessar o microfone para gravar áudio.</string>
