@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:object_parser/pages/camera_with_voice.dart';
@@ -13,109 +12,26 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
 import 'package:audioplayers/audioplayers.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 // import 'package:just_audio/just_audio.dart';
-late List<CameraDescription> _cameras;
+
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Configurar a orientação preferencial
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
-
-  _cameras = await availableCameras();
-  runApp(const CameraWithVoice());
+  final cameras =await availableCameras();
+  runApp( MyApp(cameras: cameras,));
 }
-
-class CameraWithVoice extends StatefulWidget {
-  const CameraWithVoice({super.key});
-
-  @override
-  State<CameraWithVoice> createState() => _CameraWithVoiceState();
-}
-
-class _CameraWithVoiceState extends State<CameraWithVoice> {
-  late CameraController controller;
-
-  @override
-  void initState() {
-    super.initState();
-    cameraInit();
-  }
-
-  void cameraInit() async {
-    controller = CameraController(_cameras[0], ResolutionPreset.max);
-
-    try {
-      await controller.initialize();
-      if (mounted) {
-        setState(() {}); // Atualiza a UI para exibir o preview da câmera
-      }
-    } catch (e) {
-      if (e is CameraException) {
-        switch (e.code) {
-          case 'CameraAccessDenied':
-            print('Acesso à câmera negado');
-            break;
-          default:
-            print('Erro desconhecido: $e');
-            break;
-        }
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    controller.dispose(); // Liberar a câmera ao sair
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!controller.value.isInitialized) {
-      // Exibir um indicador de carregamento enquanto a câmera não estiver pronta
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    return MaterialApp(
-      home: 
-         RotatedBox(
-          quarterTurns: 1,
-          child: CameraPreview(controller),
-        ),
-    
-    );
-  }
-}
-
-
-
-
-
-
-
-
-
-
-
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final List<CameraDescription> cameras;
+  const MyApp({super.key, required this.cameras});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+      home: Scaffold(
+        body: CameraWithVoiceControl(cameras: cameras,),
       ),
-      home:  CameraWithVoice(),
     );
   }
 }
@@ -129,14 +45,9 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
 
-
-  late stt.SpeechToText speech;
-  bool isListening = false;
-  String text = 'Digite algo';
-
-
   final ImagePicker _picker = ImagePicker();
   XFile? _image;
+
   final FlutterSoundRecorder recorder = FlutterSoundRecorder();
   final FlutterSoundPlayer player = FlutterSoundPlayer();
   bool isRecording = false;
@@ -150,42 +61,7 @@ class _MyHomePageState extends State<MyHomePage> {
     super.initState();
     initRecorder();
     initPlayer();
-    speech = stt.SpeechToText();
-    openCamera();
   }
-
-  
-
-
-  void startListening() async{
-    bool available = await speech.initialize();
-    if(available){
-      setState(() {
-        isListening = true;
-      });
-      speech.listen(onResult: (result) {
-        text = result.recognizedWords;
-      },);
-      checkVoiceCommand(text);
-    }
-  }
-
-  void checkVoiceCommand(String command) {
-    
-      print(command);
-      setState(() {
-        text = '';
-      });
-    
-  }
-
-  void stopListening(){
-    speech.stop();
-    setState(() {
-      isListening = false;
-    });
-  }
-
 
   Future<void> initRecorder() async {
     var status = await Permission.microphone.request();
@@ -326,7 +202,6 @@ class _MyHomePageState extends State<MyHomePage> {
           SnackBar(content: Text('Áudio baixado com sucesso! Salvo em: $filePath')),
         );
 
-
         final player = AudioPlayer();
         await player.play(DeviceFileSource(filePath));
 
@@ -359,16 +234,14 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> openCamera()async {
-    startListening();
     final XFile? image = await _picker.pickImage(source: ImageSource.camera);
-    // if(image !=null){
-    //   _image = image;
-    //   setState(() {
-    //     _image = image;
-    //   });
-    // }
+    if(image !=null){
+      _image = image;
+      setState(() {
+        _image = image;
+      });
+    }
   }
-  
 
   @override
   Widget build(BuildContext context) {
@@ -387,8 +260,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     height: 300,
                   ),
             const SizedBox(height: 20,),
-            // ElevatedButton(onPressed: openCamera, child: const Text("Abrir camera")),
-            ElevatedButton(onPressed: isListening ? stopListening : startListening, child: Text(isListening ? 'Parar' : 'Começar a Ouvir')),
+            ElevatedButton(onPressed: openCamera, child: const Text("Abrir camera")),
 
             const SizedBox(height: 20,),
 
@@ -437,7 +309,6 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
     );
   }
-  
 
   
 }
