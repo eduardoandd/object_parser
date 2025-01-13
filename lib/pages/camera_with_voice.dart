@@ -1,8 +1,13 @@
 // ignore_for_file: unnecessary_null_comparison, prefer_conditional_assignment
 
+import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:picovoice_flutter/picovoice_error.dart';
+import 'package:picovoice_flutter/picovoice_manager.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:rhino_flutter/rhino.dart';
 
 class CameraWithVoiceControl extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -17,11 +22,61 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
   late CameraDescription backCamera, frontCamera;
   late Future<void> cameraValue;
 
+  final String accessKey = 'A2hg2EegEJdd3N8RvgHnD36v+7jUwnbyMZrfM4f3TQfh+mAdFD2YJQ==';
+  // String platform = Platform.isAndroid ? "android" : "ios";
+
+  String keywordPath = "assets/Glauco_pt_android_v3_0_0.ppn";
+  String contextPath = "assets/Magic-Camera_pt_android_v3_0_0.rhn"; 
+  String porcupineModelPath = "assets/porcupine_params_pt.pv"; 
+  String rhinoModelPath = "assets/rhino_params_pt.pv"; 
+
+  
+  PicovoiceManager? _picovoiceManager;
+
+  void _initPicovoice() async {
+  try {
+    _picovoiceManager = await PicovoiceManager.create(
+        accessKey,
+        keywordPath, 
+        _wakeWordCallback, 
+        contextPath, 
+        _inferenceCallback, 
+        porcupineModelPath: porcupineModelPath,
+        rhinoModelPath: rhinoModelPath
+      );
+
+
+
+    // start audio processing
+    _picovoiceManager!.start();        
+  } on PicovoiceException catch (ex) {
+    print(ex.message);
+  }
+}
+
+void _wakeWordCallback() {
+  print("wake word detected!");
+}
+
+void _inferenceCallback(RhinoInference inference) {
+  if (inference.isUnderstood == true){
+    print("Comando reconhecido: ${inference.intent}");
+     print("Slots: ${inference.slots}");
+
+  }
+  else{
+    print("Comando não reconhecido.");
+  }
+  
+}
+  
   @override
   void initState() {
     cameraController =
         CameraController(widget.cameras[0], ResolutionPreset.high);
     cameraValue = cameraController.initialize();
+    _initPicovoice();
+
     getAvailableCamera();
     super.initState();
   }

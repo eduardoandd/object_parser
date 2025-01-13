@@ -15,6 +15,8 @@
 	<string>Precisamos acessar sua galeria de fotos.</string>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>[Permission explanation]</string>
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>object_parser</string>
