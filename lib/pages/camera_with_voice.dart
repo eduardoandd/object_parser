@@ -118,13 +118,15 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
             text = text;
             print(text);
           });
+          
           _porcupineManager.start();
           
         }
       };
     }
+    await _screenShotPage();
+    await uploadAudioAndImage(file!, text);
   }
-
 
   void _wakeWordCallback(int keywordIndex) {
     if (keywordIndex >= 0) {
@@ -177,15 +179,7 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     });
   }
 
-  Future<void> _stopRecording() async {
-    print('Parando o audio.');
-    await recorder.stopRecorder();
-    setState(() {
-      _isRecording = false;
-    });
-    print(recordedFilePath);
-    print("Gravação parada. Arquivo salvo em: $recordedFilePath");
-  }
+  
 
   Future<void> _screenShotPage() async {
     print("Wake word detected!");
@@ -216,8 +210,8 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     }
   }
 
-  Future<void> uploadAudioAndImage(File file, String audioPath) async {
-    if (recordedFilePath.isEmpty || file == null) {
+  Future<void> uploadAudioAndImage(File file, String text) async {
+    if (text.isEmpty || file == null) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("imagem ou audio não reconhecidos!")));
       return;
@@ -229,11 +223,9 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
 
     try {
       final uri = Uri.parse('http://192.168.0.220:8000/object_img/');
-      var request = http.MultipartRequest('POST', uri)
-        ..files.add(await http.MultipartFile.fromPath('image', file.path))
-        ..files
-            .add(await http.MultipartFile.fromPath('audio', recordedFilePath));
-
+      var request = http.MultipartRequest('POST', uri);
+      request.files.add(await http.MultipartFile.fromPath('image', file.path));
+      request.fields['text'] = text;
       final response = await request.send();
       if (response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -256,12 +248,6 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     }
   }
 
-  void _inferenceCallback(RhinoInference inference) async {
-    print(inference);
-    await _stopRecording();
-    await _screenShotPage();
-    await uploadAudioAndImage(file!, recordedFilePath);
-  }
 
   void getAvailableCamera() async {
     for (var i = 0; i < widget.cameras.length; i++) {
