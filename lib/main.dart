@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:object_parser/pages/camera_with_voice.dart';
+import 'package:object_parser/pages/teste.dart';
 // import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -30,7 +31,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        body: CameraWithVoiceControl(cameras: cameras,),
+        body: TestePage(),
       ),
     );
   }
