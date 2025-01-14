@@ -71,8 +71,8 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     getAvailableCamera();
     initRecorder();
     createPorcupineManager();
-    super.initState();
     speech = stt.SpeechToText();
+    super.initState();
   }
 
   @override
@@ -84,14 +84,53 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
   }
 
   late PorcupineManager _porcupineManager;
-  late stt.SpeechToText _speechToText;
- 
+
+  void startListening() async {
+    await Future.delayed(const Duration(seconds: 2));
+    print("iniciaindo");
+    bool available = await speech.initialize();
+    if (available) {
+      setState(() {
+        isListening = true;
+        text = ''; // Limpa o texto antes de começar
+      });
+
+      speech.listen(
+        onResult: (result) {
+          setState(() {
+            text = result.recognizedWords;
+          });
+        },
+        listenOptions: stt.SpeechListenOptions(
+          listenMode: stt.ListenMode.dictation, // Detecta pausas para finalizar
+          cancelOnError: true, 
+        ),
+      );
+
+      speech.statusListener = (status) {
+        if (status == 'notListening') {
+          print('Parando o audio....');
+
+          setState(() {
+            isListening = false;
+          });
+          setState(() {
+            text = text;
+            print(text);
+          });
+          _porcupineManager.start();
+          
+        }
+      };
+    }
+  }
+
 
   void _wakeWordCallback(int keywordIndex) {
     if (keywordIndex >= 0) {
       print("palavra reconhecida!");
-
-
+      _porcupineManager.stop();
+      startListening();
       
     }
   }
@@ -107,9 +146,6 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
       print(err.message);
     }
   }
-
-
-  
 
   Future<bool> _checkAudioPermission() async {
     bool permissionGranted = await Permission.microphone.isGranted;

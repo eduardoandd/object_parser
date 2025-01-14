@@ -26,25 +26,34 @@ class _TestePageState extends State<TestePage> {
         isListening = true;
         text = ''; // Limpa o texto antes de começar
       });
-      speech.listen(onResult: (result) {
-        setState(() {
-          text = result.recognizedWords;
-        });
-      });
-    }
-  }
 
-  void stopListening() {
-    speech.stop();
-    setState(() {
-      isListening = false;
-    });
-    checkVoiceCommand(text); // Chama a verificação após parar
+      
+      speech.listen(
+        pauseFor: Duration(seconds: 4),
+        onResult: (result) {
+          setState(() {
+            text = result.recognizedWords;
+          });
+        },
+      );
+
+      speech.statusListener = (status) {
+        if (status == 'notListening') {
+          print('Parando o audio....');
+          
+          
+          setState(() {
+            isListening = false;
+          });
+          checkVoiceCommand(text); 
+        }
+      };
+    }
   }
 
   void checkVoiceCommand(String command) {
     print('Comando detectado: $command');
-    // Você pode adicionar lógica aqui para tratar o comando de voz
+    // Adicione sua lógica para tratar o comando aqui
   }
 
   @override
@@ -63,8 +72,8 @@ class _TestePageState extends State<TestePage> {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: isListening ? stopListening : startListening,
-              child: Text(isListening ? 'Parar' : 'Começar a Ouvir'),
+              onPressed: isListening ? null : startListening,
+              child: const Text('Começar a Ouvir'),
             ),
             const SizedBox(height: 20),
             Text(
