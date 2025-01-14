@@ -76,6 +76,7 @@ flutter:
     - assets/Magic-Camera_pt_android_v3_0_0.rhn
     - assets/rhino_params_pt.pv
     - assets/porcupine_params_pt.pv
+    - assets/teste_pt_android_v3_0_0.ppn
     
 
   # An image asset can refer to one or more resolution-specific "variants", see
