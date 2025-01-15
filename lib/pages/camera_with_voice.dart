@@ -1,33 +1,17 @@
-// ignore_for_file: unnecessary_null_comparison, prefer_conditional_assignment
-
 import 'dart:io';
-
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_sound/public/flutter_sound_player.dart';
+import 'package:object_parser/services/audio_permission_service.dart';
+import 'package:object_parser/services/screenshot_service.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:picovoice_flutter/picovoice_error.dart';
-import 'package:picovoice_flutter/picovoice_manager.dart';
 import 'package:porcupine_flutter/porcupine_error.dart';
 import 'package:porcupine_flutter/porcupine_manager.dart';
 import 'package:screenshot/screenshot.dart';
-import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:rhino_flutter/rhino.dart';
 import 'package:http/http.dart' as http;
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_sound/flutter_sound.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:object_parser/pages/camera_with_voice.dart';
-// import 'package:just_audio/just_audio.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:http/http.dart' as http;
-import 'package:audioplayers/audioplayers.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 class CameraWithVoiceControl extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -38,9 +22,16 @@ class CameraWithVoiceControl extends StatefulWidget {
 }
 
 class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
+
+  final AudioPermissionService _audioPermissionService = AudioPermissionService();
+  final ScreenshotService _screenshotService = ScreenshotService();
+
+  
+
   late CameraController cameraController;
   late CameraDescription backCamera, frontCamera;
   late Future<void> cameraValue;
+
 
   final String accessKey =
       'A2hg2EegEJdd3N8RvgHnD36v+7jUwnbyMZrfM4f3TQfh+mAdFD2YJQ==';
@@ -52,7 +43,6 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
   String rhinoModelPath = "assets/rhino_params_pt.pv";
 
   bool _isRecording = false;
-  final ScreenshotController _screenshotController = ScreenshotController();
   File? file;
   bool isUploading = false;
   final FlutterSoundRecorder recorder = FlutterSoundRecorder();
@@ -61,10 +51,13 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
   late stt.SpeechToText speech;
   bool isListening = false;
   String text = '';
+  String downloadPath = '';
+  String audioUrl =
+      'http://192.168.0.220:8000/media/ai_response/ai_response.mp3';
 
   @override
   void initState() {
-    _checkAudioPermission();
+    _initializePermission();
     cameraController =
         CameraController(widget.cameras[0], ResolutionPreset.high);
     cameraValue = cameraController.initialize();
@@ -83,6 +76,14 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     super.dispose();
   }
 
+  _initializePermission() async{
+    final hasAudioPermission = await _audioPermissionService.checkAndRequestPermission();
+    if(!hasAudioPermission){
+      print("Permissão de áudio negada.");
+      return;
+    }
+  }
+
   late PorcupineManager _porcupineManager;
 
   void startListening() async {
@@ -92,7 +93,7 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     if (available) {
       setState(() {
         isListening = true;
-        text = ''; // Limpa o texto antes de começar
+        text = '';
       });
 
       speech.listen(
@@ -101,10 +102,6 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
             text = result.recognizedWords;
           });
         },
-        listenOptions: stt.SpeechListenOptions(
-          listenMode: stt.ListenMode.dictation, // Detecta pausas para finalizar
-          cancelOnError: true, 
-        ),
       );
 
       speech.statusListener = (status) {
@@ -118,14 +115,14 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
             text = text;
             print(text);
           });
-          
+
           _porcupineManager.start();
-          
         }
       };
     }
-    await _screenShotPage();
+    await _screenCapture();
     await uploadAudioAndImage(file!, text);
+    await downloadAudio(audioUrl);
   }
 
   void _wakeWordCallback(int keywordIndex) {
@@ -133,7 +130,6 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
       print("palavra reconhecida!");
       _porcupineManager.stop();
       startListening();
-      
     }
   }
 
@@ -149,14 +145,6 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     }
   }
 
-  Future<bool> _checkAudioPermission() async {
-    bool permissionGranted = await Permission.microphone.isGranted;
-    if (!permissionGranted) {
-      await Permission.microphone.request();
-    }
-    permissionGranted = await Permission.microphone.isGranted;
-    return permissionGranted;
-  }
 
   Future<void> initRecorder() async {
     var status = await Permission.microphone.request();
@@ -179,34 +167,15 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     });
   }
 
-  
-
-  Future<void> _screenShotPage() async {
-    print("Wake word detected!");
-
-    try {
-      // Capture the screenshot
-      final image = await _screenshotController.capture();
-      if (image != null) {
-        // Get the directory to save the file
-        final directory = await getExternalStorageDirectory(); // Para Android
-        // final directory = await getApplicationDocumentsDirectory(); // Para iOS
-
-        if (directory != null) {
-          final filePath =
-              '${directory.path}/screenshot_${DateTime.now().millisecondsSinceEpoch}.png';
-          file = File(filePath);
-          setState(() {});
-          await file!.writeAsBytes(image);
-          print("Screenshot salva em: $filePath");
-        } else {
-          print("Não foi possível acessar o diretório.");
-        }
-      } else {
-        print("Falha ao capturar a screenshot.");
-      }
-    } catch (e) {
-      print("Erro ao salvar a screenshot: $e");
+  Future<void> _screenCapture() async {
+    final capturedFile = await _screenshotService.captureAndSaveScreenshot();
+    if(capturedFile != null){
+      setState(() {
+        file = capturedFile;
+      });
+    }
+    else{
+      print("Erro ao capturar a screenshot.");
     }
   }
 
@@ -248,6 +217,42 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     }
   }
 
+  Future<void> downloadAudio(String audioUrl) async {
+    try {
+      final response = await http.get(Uri.parse(audioUrl));
+      if (response.statusCode == 200) {
+        final directory = await getExternalStorageDirectory();
+        final downloadDirectory = Directory('${directory!.path}/Download');
+        if (!await downloadDirectory.exists()) {
+          await downloadDirectory.create(recursive: true);
+        }
+        final filePath = '${downloadDirectory.path}/ai_response.mp3';
+
+        setState(() {
+          downloadPath = filePath;
+        });
+
+        final file = File(filePath);
+        await file.writeAsBytes(response.bodyBytes);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Áudio baixado com sucesso! Salvo em: $filePath')),
+        );
+        final player = AudioPlayer();
+        await player.play(DeviceFileSource(filePath));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Erro ao baixar o áudio: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao processar o áudio: $e')),
+      );
+    }
+  }
 
   void getAvailableCamera() async {
     for (var i = 0; i < widget.cameras.length; i++) {
@@ -282,7 +287,7 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     }
 
     return Screenshot(
-      controller: _screenshotController,
+      controller: _screenshotService.screenshotController,
       child: Scaffold(
         appBar: AppBar(
           title: Center(child: Text('Magic Camera')),
@@ -297,7 +302,6 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
                       box.globalToLocal(details.globalPosition);
                   final Size size = box.size;
 
-                  // Calcula coordenadas normalizadas
                   final double x = localPosition.dx / size.width;
                   final double y = localPosition.dy / size.height;
 
