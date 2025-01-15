@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:object_parser/services/audio_permission_service.dart';
+import 'package:object_parser/services/camera_service.dart';
 import 'package:object_parser/services/screenshot_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:porcupine_flutter/porcupine_error.dart';
@@ -22,16 +23,13 @@ class CameraWithVoiceControl extends StatefulWidget {
 }
 
 class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
-
-  final AudioPermissionService _audioPermissionService = AudioPermissionService();
+  final AudioPermissionService _audioPermissionService =
+      AudioPermissionService();
   final ScreenshotService _screenshotService = ScreenshotService();
-
-  
-
-  late CameraController cameraController;
+  late CameraService _cameraService;
   late CameraDescription backCamera, frontCamera;
-  late Future<void> cameraValue;
 
+  late Future<void> cameraValue;
 
   final String accessKey =
       'A2hg2EegEJdd3N8RvgHnD36v+7jUwnbyMZrfM4f3TQfh+mAdFD2YJQ==';
@@ -58,10 +56,8 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
   @override
   void initState() {
     _initializePermission();
-    cameraController =
-        CameraController(widget.cameras[0], ResolutionPreset.high);
-    cameraValue = cameraController.initialize();
-    getAvailableCamera();
+    _cameraService = CameraService();
+    _initializeCamera();
     initRecorder();
     createPorcupineManager();
     speech = stt.SpeechToText();
@@ -70,15 +66,21 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
 
   @override
   void dispose() {
-    cameraController.dispose();
+    _cameraService.cameraController.dispose();
     _porcupineManager.stop();
     // _porcupineManager.dispose();
     super.dispose();
   }
 
-  _initializePermission() async{
-    final hasAudioPermission = await _audioPermissionService.checkAndRequestPermission();
-    if(!hasAudioPermission){
+  Future<void> _initializeCamera() async {
+    await _cameraService.getAvailableCameras(widget.cameras);
+    setState(() {});
+  }
+
+  _initializePermission() async {
+    final hasAudioPermission =
+        await _audioPermissionService.checkAndRequestPermission();
+    if (!hasAudioPermission) {
       print("Permissão de áudio negada.");
       return;
     }
@@ -145,7 +147,6 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     }
   }
 
-
   Future<void> initRecorder() async {
     var status = await Permission.microphone.request();
     if (status != PermissionStatus.granted) {
@@ -169,12 +170,11 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
 
   Future<void> _screenCapture() async {
     final capturedFile = await _screenshotService.captureAndSaveScreenshot();
-    if(capturedFile != null){
+    if (capturedFile != null) {
       setState(() {
         file = capturedFile;
       });
-    }
-    else{
+    } else {
       print("Erro ao capturar a screenshot.");
     }
   }
@@ -254,35 +254,10 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     }
   }
 
-  void getAvailableCamera() async {
-    for (var i = 0; i < widget.cameras.length; i++) {
-      var camera = widget.cameras[i];
-      if (camera.lensDirection == CameraLensDirection.back) {
-        backCamera = camera;
-      }
-      if (camera.lensDirection == CameraLensDirection.front) {
-        frontCamera = camera;
-      }
-    }
-    if (backCamera == null) {
-      backCamera = widget.cameras.first;
-    }
-    if (frontCamera == null) {
-      frontCamera = widget.cameras.last;
-    }
-    cameraController = CameraController(backCamera, ResolutionPreset.medium);
-
-    cameraController.initialize().then((_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {});
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
-    if (!cameraController.value.isInitialized) {
+    if (!_cameraService.cameraController.value.isInitialized) {
       return Center(child: CircularProgressIndicator());
     }
 
@@ -306,17 +281,18 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
                   final double y = localPosition.dy / size.height;
 
                   try {
-                    await cameraController.setFocusPoint(Offset(x, y));
+                    await _cameraService.setFocusPoint(Offset(x, y));
                   } catch (e) {
                     print('Erro ao definir ponto de foco: $e');
                   }
                 },
                 child: RotatedBox(
-                  quarterTurns: cameraController.description.lensDirection ==
+                  quarterTurns: _cameraService
+                              .cameraController.description.lensDirection ==
                           CameraLensDirection.back
                       ? 1
                       : 3,
-                  child: CameraPreview(cameraController),
+                  child: CameraPreview(_cameraService.cameraController),
                 ),
               ),
             ),
@@ -329,16 +305,11 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
                 children: [
                   ElevatedButton(
                     onPressed: () async {
-                      if (cameraController.description.lensDirection ==
-                          CameraLensDirection.back) {
-                        cameraController = CameraController(
-                            frontCamera, ResolutionPreset.high);
-                      } else {
-                        cameraController =
-                            CameraController(backCamera, ResolutionPreset.high);
-                      }
-
-                      await cameraController.initialize();
+                      await _cameraService.switchCamera(
+                          _cameraService.cameraController.description,
+                          _cameraService.frontCamera,
+                          _cameraService.backCamera,
+                      );
                       setState(() {});
                     },
                     style: ElevatedButton.styleFrom(
