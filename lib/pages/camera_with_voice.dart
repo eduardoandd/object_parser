@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:object_parser/services/audio_download_service.dart';
 import 'package:object_parser/services/audio_permission_service.dart';
 import 'package:object_parser/services/camera_service.dart';
+import 'package:object_parser/services/listener_service.dart';
 import 'package:object_parser/services/screenshot_service.dart';
+import 'package:object_parser/services/upload_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:porcupine_flutter/porcupine_error.dart';
 import 'package:porcupine_flutter/porcupine_manager.dart';
@@ -27,7 +30,11 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
       AudioPermissionService();
   final ScreenshotService _screenshotService = ScreenshotService();
   late CameraService _cameraService;
+  late ListenerService _listenerService;
   late CameraDescription backCamera, frontCamera;
+  String recognizedText = '';
+  late AudioDownloadService _audioDownloadService;
+  late UploadService _uploadService;
 
   late Future<void> cameraValue;
 
@@ -40,25 +47,24 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
   String porcupineModelPath = "assets/porcupine_params_pt.pv";
   String rhinoModelPath = "assets/rhino_params_pt.pv";
 
-  bool _isRecording = false;
   File? file;
   bool isUploading = false;
-  final FlutterSoundRecorder recorder = FlutterSoundRecorder();
   final FlutterSoundPlayer player = FlutterSoundPlayer();
-  String recordedFilePath = '';
   late stt.SpeechToText speech;
   bool isListening = false;
   String text = '';
   String downloadPath = '';
-  String audioUrl =
-      'http://192.168.0.220:8000/media/ai_response/ai_response.mp3';
+
 
   @override
   void initState() {
     _initializePermission();
     _cameraService = CameraService();
     _initializeCamera();
-    initRecorder();
+    _listenerService = ListenerService();
+    _audioDownloadService = AudioDownloadService();
+    _uploadService = UploadService();
+    _initializeVoiceRecognition();
     createPorcupineManager();
     speech = stt.SpeechToText();
     super.initState();
@@ -71,6 +77,29 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     // _porcupineManager.dispose();
     super.dispose();
   }
+
+  Future<void> _initializeVoiceRecognition() async {
+    bool available = await _listenerService.initialize();
+    if(!available){
+      print("Erro ao inicializar o reconhecimento de voz.");
+    }
+  }
+
+  void _startListening(){
+    _listenerService.startListening((text){
+      setState(() {
+        recognizedText = text;
+        print(recognizedText);
+      _porcupineManager.start();
+
+      });
+    });
+    
+  }
+
+  // void _stopListening(){
+  //   _listenerService.stopListening();
+  // }
 
   Future<void> _initializeCamera() async {
     await _cameraService.getAvailableCameras(widget.cameras);
@@ -88,51 +117,57 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
 
   late PorcupineManager _porcupineManager;
 
-  void startListening() async {
-    await Future.delayed(const Duration(seconds: 2));
-    print("iniciaindo");
-    bool available = await speech.initialize();
-    if (available) {
-      setState(() {
-        isListening = true;
-        text = '';
-      });
+  // void startListening() async {
+  //   await Future.delayed(const Duration(seconds: 2));
+  //   print("iniciaindo");
+  //   bool available = await speech.initialize();
+  //   if (available) {
+  //     setState(() {
+  //       isListening = true;
+  //       text = '';
+  //     });
 
-      speech.listen(
-        onResult: (result) {
-          setState(() {
-            text = result.recognizedWords;
-          });
-        },
-      );
+  //     speech.listen(
+  //       onResult: (result) {
+  //         setState(() {
+  //           text = result.recognizedWords;
+  //         });
+  //       },
+  //     );
 
-      speech.statusListener = (status) {
-        if (status == 'notListening') {
-          print('Parando o audio....');
+  //     speech.statusListener = (status) {
+  //       if (status == 'notListening') {
+  //         print('Parando o audio....');
 
-          setState(() {
-            isListening = false;
-          });
-          setState(() {
-            text = text;
-            print(text);
-          });
+  //         setState(() {
+  //           isListening = false;
+  //         });
+  //         setState(() {
+  //           text = text;
+  //           print(text);
+  //         });
 
-          _porcupineManager.start();
-        }
-      };
-    }
-    await _screenCapture();
-    await uploadAudioAndImage(file!, text);
-    await downloadAudio(audioUrl);
-  }
+  //       }
+  //     };
+  //   }
+  //   await _screenCapture();
+  //   await uploadAudioAndImage(file!, text);
+  //   await downloadAudio(audioUrl);
+  // }
 
   void _wakeWordCallback(int keywordIndex) {
     if (keywordIndex >= 0) {
       print("palavra reconhecida!");
       _porcupineManager.stop();
-      startListening();
+      _startListening();
+      _CaptureScreen();
+      _uploadData();
+      _donwloadAudio();
     }
+  }
+
+  Future<void> _donwloadAudio() async{
+    await _audioDownloadService.downloadAudio();
   }
 
   void createPorcupineManager() async {
@@ -147,28 +182,7 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     }
   }
 
-  Future<void> initRecorder() async {
-    var status = await Permission.microphone.request();
-    if (status != PermissionStatus.granted) {
-      throw RecordingPermissionException(
-          'Permissão para usar o microfone negada');
-    }
-    await recorder.openRecorder();
-  }
-
-  Future<void> startRecording() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final path = '${directory.path}/audio_recording.aac';
-    final wavPath = path.replaceAll('.aac', '.wav');
-    await recorder.startRecorder(toFile: wavPath, codec: Codec.pcm16WAV);
-
-    setState(() {
-      _isRecording = true;
-      recordedFilePath = wavPath;
-    });
-  }
-
-  Future<void> _screenCapture() async {
+  Future<void> _CaptureScreen() async {
     final capturedFile = await _screenshotService.captureAndSaveScreenshot();
     if (capturedFile != null) {
       setState(() {
@@ -252,6 +266,14 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
         SnackBar(content: Text('Erro ao processar o áudio: $e')),
       );
     }
+  }
+
+  Future<void> _uploadData() async{
+    if(file == null || recognizedText.isEmpty){
+      print("Imagem ou texto não disponíveis.");
+      return;
+    }
+    _uploadService.uploadImageAndText(file!, text);
   }
 
 
