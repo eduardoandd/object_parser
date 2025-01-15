@@ -1,21 +1,21 @@
+// ignore_for_file: unnecessary_null_comparison, prefer_conditional_assignment
+
 import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:object_parser/services/audio_download_service.dart';
-import 'package:object_parser/services/audio_permission_service.dart';
 import 'package:object_parser/services/camera_service.dart';
-import 'package:object_parser/services/listener_service.dart';
 import 'package:object_parser/services/screenshot_service.dart';
 import 'package:object_parser/services/upload_service.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:porcupine_flutter/porcupine_error.dart';
 import 'package:porcupine_flutter/porcupine_manager.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:http/http.dart' as http;
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
+
 
 class CameraWithVoiceControl extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -26,148 +26,102 @@ class CameraWithVoiceControl extends StatefulWidget {
 }
 
 class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
-  final AudioPermissionService _audioPermissionService =
-      AudioPermissionService();
-  final ScreenshotService _screenshotService = ScreenshotService();
-  late CameraService _cameraService;
-  late ListenerService _listenerService;
   late CameraDescription backCamera, frontCamera;
-  String recognizedText = '';
-  late AudioDownloadService _audioDownloadService;
-  late UploadService _uploadService;
+  late AudioDownloadService _audioDownloadService = AudioDownloadService();
+  late UploadService _uploadService = UploadService();
+  late ScreenshotService _screenshotService = ScreenshotService();
+  final CameraService _cameraService = CameraService();
+  late PorcupineManager _porcupineManager;
 
-  late Future<void> cameraValue;
 
-  final String accessKey =
-      'A2hg2EegEJdd3N8RvgHnD36v+7jUwnbyMZrfM4f3TQfh+mAdFD2YJQ==';
-  // String platform = Platform.isAndroid ? "android" : "ios";
-
+  final String accessKey ='A2hg2EegEJdd3N8RvgHnD36v+7jUwnbyMZrfM4f3TQfh+mAdFD2YJQ==';
   String keywordPath = "assets/teste_pt_android_v3_0_0.ppn";
   String contextPath = "assets/Magic-Camera_pt_android_v3_0_0.rhn";
   String porcupineModelPath = "assets/porcupine_params_pt.pv";
-  String rhinoModelPath = "assets/rhino_params_pt.pv";
 
   File? file;
   bool isUploading = false;
-  final FlutterSoundPlayer player = FlutterSoundPlayer();
+  String recordedFilePath = '';
   late stt.SpeechToText speech;
   bool isListening = false;
   String text = '';
-  String downloadPath = '';
-
 
   @override
   void initState() {
-    _initializePermission();
-    _cameraService = CameraService();
-    _initializeCamera();
-    _listenerService = ListenerService();
     _audioDownloadService = AudioDownloadService();
     _uploadService = UploadService();
-    _initializeVoiceRecognition();
+    _screenshotService = ScreenshotService();
+    _checkAudioPermission();
     createPorcupineManager();
     speech = stt.SpeechToText();
+    _initializeCamera();
     super.initState();
   }
 
   @override
   void dispose() {
-    _cameraService.cameraController.dispose();
     _porcupineManager.stop();
     // _porcupineManager.dispose();
     super.dispose();
   }
-
-  Future<void> _initializeVoiceRecognition() async {
-    bool available = await _listenerService.initialize();
-    if(!available){
-      print("Erro ao inicializar o reconhecimento de voz.");
-    }
-  }
-
-  void _startListening(){
-    _listenerService.startListening((text){
-      setState(() {
-        recognizedText = text;
-        print(recognizedText);
-      _porcupineManager.start();
-
-      });
-    });
-    
-  }
-
-  // void _stopListening(){
-  //   _listenerService.stopListening();
-  // }
 
   Future<void> _initializeCamera() async {
     await _cameraService.getAvailableCameras(widget.cameras);
     setState(() {});
   }
 
-  _initializePermission() async {
-    final hasAudioPermission =
-        await _audioPermissionService.checkAndRequestPermission();
-    if (!hasAudioPermission) {
-      print("Permissão de áudio negada.");
-      return;
+  void startListening() async {
+    await Future.delayed(const Duration(seconds: 2));
+    print("iniciaindo");
+    bool available = await speech.initialize();
+    if (available) {
+      setState(() {
+        isListening = true;
+        text = ''; // Limpa o texto antes de começar
+      });
+
+      speech.listen(
+        onResult: (result) {
+          setState(() {
+            text = result.recognizedWords;
+          });
+        },
+        listenOptions: stt.SpeechListenOptions(
+          listenMode: stt.ListenMode.dictation, 
+          cancelOnError: true, 
+        ),
+      );
+
+      speech.statusListener = (status) {
+        if (status == 'notListening') {
+          print('Parando o audio....');
+
+          setState(() {
+            isListening = false;
+          });
+          setState(() {
+            text = text;
+            print(text);
+          });
+          
+          _porcupineManager.start();
+          
+        }
+      };
     }
+    await _screenCapture();
+    // await uploadAudioAndImage(file!, text);
+    await _uploadService.uploadImageAndText(file!, text);
+    _audioDownloadService.downloadAudio();
   }
-
-  late PorcupineManager _porcupineManager;
-
-  // void startListening() async {
-  //   await Future.delayed(const Duration(seconds: 2));
-  //   print("iniciaindo");
-  //   bool available = await speech.initialize();
-  //   if (available) {
-  //     setState(() {
-  //       isListening = true;
-  //       text = '';
-  //     });
-
-  //     speech.listen(
-  //       onResult: (result) {
-  //         setState(() {
-  //           text = result.recognizedWords;
-  //         });
-  //       },
-  //     );
-
-  //     speech.statusListener = (status) {
-  //       if (status == 'notListening') {
-  //         print('Parando o audio....');
-
-  //         setState(() {
-  //           isListening = false;
-  //         });
-  //         setState(() {
-  //           text = text;
-  //           print(text);
-  //         });
-
-  //       }
-  //     };
-  //   }
-  //   await _screenCapture();
-  //   await uploadAudioAndImage(file!, text);
-  //   await downloadAudio(audioUrl);
-  // }
 
   void _wakeWordCallback(int keywordIndex) {
     if (keywordIndex >= 0) {
       print("palavra reconhecida!");
       _porcupineManager.stop();
-      _startListening();
-      _CaptureScreen();
-      _uploadData();
-      _donwloadAudio();
+      startListening();
+      
     }
-  }
-
-  Future<void> _donwloadAudio() async{
-    await _audioDownloadService.downloadAudio();
   }
 
   void createPorcupineManager() async {
@@ -182,13 +136,23 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     }
   }
 
-  Future<void> _CaptureScreen() async {
+  Future<bool> _checkAudioPermission() async {
+    bool permissionGranted = await Permission.microphone.isGranted;
+    if (!permissionGranted) {
+      await Permission.microphone.request();
+    }
+    permissionGranted = await Permission.microphone.isGranted;
+    return permissionGranted;
+  }
+
+  Future<void> _screenCapture() async {
     final capturedFile = await _screenshotService.captureAndSaveScreenshot();
-    if (capturedFile != null) {
+    if(capturedFile != null){
       setState(() {
         file = capturedFile;
       });
-    } else {
+    }
+    else{
       print("Erro ao capturar a screenshot.");
     }
   }
@@ -231,58 +195,12 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     }
   }
 
-  Future<void> downloadAudio(String audioUrl) async {
-    try {
-      final response = await http.get(Uri.parse(audioUrl));
-      if (response.statusCode == 200) {
-        final directory = await getExternalStorageDirectory();
-        final downloadDirectory = Directory('${directory!.path}/Download');
-        if (!await downloadDirectory.exists()) {
-          await downloadDirectory.create(recursive: true);
-        }
-        final filePath = '${downloadDirectory.path}/ai_response.mp3';
-
-        setState(() {
-          downloadPath = filePath;
-        });
-
-        final file = File(filePath);
-        await file.writeAsBytes(response.bodyBytes);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Áudio baixado com sucesso! Salvo em: $filePath')),
-        );
-        final player = AudioPlayer();
-        await player.play(DeviceFileSource(filePath));
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Erro ao baixar o áudio: ${response.statusCode}')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao processar o áudio: $e')),
-      );
-    }
-  }
-
-  Future<void> _uploadData() async{
-    if(file == null || recognizedText.isEmpty){
-      print("Imagem ou texto não disponíveis.");
-      return;
-    }
-    _uploadService.uploadImageAndText(file!, text);
-  }
-
-
+ 
   @override
   Widget build(BuildContext context) {
     if (!_cameraService.cameraController.value.isInitialized) {
       return Center(child: CircularProgressIndicator());
     }
-
     return Screenshot(
       controller: _screenshotService.screenshotController,
       child: Scaffold(
@@ -309,8 +227,7 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
                   }
                 },
                 child: RotatedBox(
-                  quarterTurns: _cameraService
-                              .cameraController.description.lensDirection ==
+                  quarterTurns: _cameraService.cameraController.description.lensDirection ==
                           CameraLensDirection.back
                       ? 1
                       : 3,
@@ -328,9 +245,9 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
                   ElevatedButton(
                     onPressed: () async {
                       await _cameraService.switchCamera(
-                          _cameraService.cameraController.description,
-                          _cameraService.frontCamera,
-                          _cameraService.backCamera,
+                        _cameraService.cameraController.description,
+                        _cameraService.frontCamera,
+                        _cameraService.backCamera
                       );
                       setState(() {});
                     },
