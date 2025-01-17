@@ -1,9 +1,11 @@
 // ignore_for_file: unnecessary_null_comparison, prefer_conditional_assignment
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:object_parser/pages/ai_response_page.dart';
 import 'package:object_parser/services/audio_download_service.dart';
 import 'package:object_parser/services/camera_service.dart';
 import 'package:object_parser/services/screenshot_service.dart';
@@ -13,9 +15,7 @@ import 'package:porcupine_flutter/porcupine_manager.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:http/http.dart' as http;
-import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
-
 
 class CameraWithVoiceControl extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -33,8 +33,8 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
   final CameraService _cameraService = CameraService();
   late PorcupineManager _porcupineManager;
 
-
-  final String accessKey ='A2hg2EegEJdd3N8RvgHnD36v+7jUwnbyMZrfM4f3TQfh+mAdFD2YJQ==';
+  final String accessKey =
+      'A2hg2EegEJdd3N8RvgHnD36v+7jUwnbyMZrfM4f3TQfh+mAdFD2YJQ==';
   String keywordPath = "assets/teste_pt_android_v3_0_0.ppn";
   String contextPath = "assets/Magic-Camera_pt_android_v3_0_0.rhn";
   String porcupineModelPath = "assets/porcupine_params_pt.pv";
@@ -72,55 +72,78 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
 
   void startListening() async {
     await Future.delayed(const Duration(seconds: 2));
-    print("iniciaindo");
-    bool available = await speech.initialize();
-    if (available) {
-      setState(() {
-        isListening = true;
-        text = ''; // Limpa o texto antes de começar
-      });
+    print("Iniciando...");
 
-      speech.listen(
-        onResult: (result) {
-          setState(() {
-            text = result.recognizedWords;
-          });
-        },
-        listenOptions: stt.SpeechListenOptions(
-          listenMode: stt.ListenMode.dictation, 
-          cancelOnError: true, 
+    bool available = await speech.initialize();
+    if (!available) {
+      print("Falha ao inicializar o reconhecimento de fala.");
+      return;
+    }
+
+    setState(() {
+      isListening = true;
+      text = ''; // Limpa o texto antes de começar
+    });
+
+    speech.statusListener = (status) async {
+      if (status == 'notListening') {
+        print('Parando o áudio...');
+        setState(() {
+          isListening = false;
+        });
+
+        // Aguarde o término antes de prosseguir
+        await speech.stop();
+        print('Texto reconhecido: $text');
+
+        _porcupineManager.start();
+        await _screenCapture();
+        await _uploadService.uploadImageAndText(file!, text);
+        await _audioDownloadService.downloadAudio();
+        final String downloadedFilePath =
+            await _audioDownloadService.downloadAudio();
+        _goToAiResponse(downloadedFilePath);
+      }
+    };
+
+    speech.listen(
+      onResult: (result) {
+        setState(() {
+          text = result.recognizedWords;
+        });
+      },
+      listenOptions: stt.SpeechListenOptions(
+        listenMode: stt.ListenMode.dictation,
+        cancelOnError: true,
+      ),
+    );
+  }
+
+  _goToAiResponse(String downloadedFilePath) {
+    if (downloadedFilePath.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("imagem ou audio não reconhecidos!")));
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              AiResponsePage(audioFilePath: downloadedFilePath),
         ),
       );
-
-      speech.statusListener = (status) {
-        if (status == 'notListening') {
-          print('Parando o audio....');
-
-          setState(() {
-            isListening = false;
-          });
-          setState(() {
-            text = text;
-            print(text);
-          });
-          
-          _porcupineManager.start();
-          
-        }
-      };
     }
-    await _screenCapture();
-    // await uploadAudioAndImage(file!, text);
-    await _uploadService.uploadImageAndText(file!, text);
-    _audioDownloadService.downloadAudio();
   }
 
   void _wakeWordCallback(int keywordIndex) {
     if (keywordIndex >= 0) {
       print("palavra reconhecida!");
       _porcupineManager.stop();
-      startListening();
-      
+
+      if (!isListening) {
+        startListening();
+      } else {
+        print("Audio em escuta");
+      }
     }
   }
 
@@ -147,12 +170,11 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
 
   Future<void> _screenCapture() async {
     final capturedFile = await _screenshotService.captureAndSaveScreenshot();
-    if(capturedFile != null){
+    if (capturedFile != null) {
       setState(() {
         file = capturedFile;
       });
-    }
-    else{
+    } else {
       print("Erro ao capturar a screenshot.");
     }
   }
@@ -195,7 +217,6 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     }
   }
 
- 
   @override
   Widget build(BuildContext context) {
     if (!_cameraService.cameraController.value.isInitialized) {
@@ -227,7 +248,8 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
                   }
                 },
                 child: RotatedBox(
-                  quarterTurns: _cameraService.cameraController.description.lensDirection ==
+                  quarterTurns: _cameraService
+                              .cameraController.description.lensDirection ==
                           CameraLensDirection.back
                       ? 1
                       : 3,
@@ -245,10 +267,9 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
                   ElevatedButton(
                     onPressed: () async {
                       await _cameraService.switchCamera(
-                        _cameraService.cameraController.description,
-                        _cameraService.frontCamera,
-                        _cameraService.backCamera
-                      );
+                          _cameraService.cameraController.description,
+                          _cameraService.frontCamera,
+                          _cameraService.backCamera);
                       setState(() {});
                     },
                     style: ElevatedButton.styleFrom(

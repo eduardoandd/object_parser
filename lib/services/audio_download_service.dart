@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 class AudioDownloadService {
   String audioUrl = 'http://192.168.0.220:8000/media/ai_response/ai_response.mp3';
 
-  Future<void> downloadAudio() async {
+  Future<String> downloadAudio() async {
     try {
       final response = await http.get(Uri.parse(audioUrl));
 
@@ -25,15 +25,18 @@ class AudioDownloadService {
 
         print('áudio baixado com sucesso! Salvo em $filePath');
 
-        await _playAudio(filePath);
+       return filePath;
       }
-    } catch (e) {
+      else{
+        print('Erro: Falha ao baixar o áudio. Código ${response.statusCode}');
+        return '';
+      }
+
+    } 
+    catch (e) {
       print('Erro ao baixar o áudio: $e');
+      return '';
     }
   }
 
-  Future<void> _playAudio(String filePath) async {
-    final player = AudioPlayer();
-    await player.play(DeviceFileSource(filePath));
-  }
 }
