@@ -9,6 +9,7 @@ import 'package:object_parser/pages/ai_response_page.dart';
 import 'package:object_parser/services/audio_download_service.dart';
 import 'package:object_parser/services/camera_service.dart';
 import 'package:object_parser/services/screenshot_service.dart';
+import 'package:object_parser/services/speech_to_text_service.dart';
 import 'package:object_parser/services/upload_service.dart';
 import 'package:porcupine_flutter/porcupine_error.dart';
 import 'package:porcupine_flutter/porcupine_manager.dart';
@@ -32,6 +33,7 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
   late ScreenshotService _screenshotService = ScreenshotService();
   final CameraService _cameraService = CameraService();
   late PorcupineManager _porcupineManager;
+  late SpeechRecognitionService _speechRecognitionService;
 
   final String accessKey =
       'A2hg2EegEJdd3N8RvgHnD36v+7jUwnbyMZrfM4f3TQfh+mAdFD2YJQ==';
@@ -48,6 +50,7 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
 
   @override
   void initState() {
+    _speechRecognitionService = SpeechRecognitionService();
     _audioDownloadService = AudioDownloadService();
     _uploadService = UploadService();
     _screenshotService = ScreenshotService();
@@ -61,6 +64,7 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
   @override
   void dispose() {
     _porcupineManager.stop();
+    _speechRecognitionService.stopListening();
     // _porcupineManager.dispose();
     super.dispose();
   }
@@ -70,12 +74,10 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     setState(() {});
   }
 
-  void startListening() async {
+   void startListening() async {
     await Future.delayed(const Duration(seconds: 2));
-    print("Iniciando...");
-
-    bool available = await speech.initialize();
-    if (!available) {
+    bool initialized = await _speechRecognitionService.initialize();
+    if (!initialized) {
       print("Falha ao inicializar o reconhecimento de fala.");
       return;
     }
@@ -85,37 +87,21 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
       text = ''; // Limpa o texto antes de começar
     });
 
-    speech.statusListener = (status) async {
-      if (status == 'notListening') {
-        print('Parando o áudio...');
+    _speechRecognitionService.startListening(
+      (recognizedText) {
         setState(() {
-          isListening = false;
+          text = recognizedText;
         });
-
-        // Aguarde o término antes de prosseguir
-        await speech.stop();
-        print('Texto reconhecido: $text');
-
-        _porcupineManager.start();
+      },
+      () async {
+        print('Parando o áudio...');
+        await _porcupineManager.start();
         await _screenCapture();
         await _uploadService.uploadImageAndText(file!, text);
         await _audioDownloadService.downloadAudio();
-        final String downloadedFilePath =
-            await _audioDownloadService.downloadAudio();
+        final String downloadedFilePath = await _audioDownloadService.downloadAudio();
         _goToAiResponse(downloadedFilePath);
-      }
-    };
-
-    speech.listen(
-      onResult: (result) {
-        setState(() {
-          text = result.recognizedWords;
-        });
       },
-      listenOptions: stt.SpeechListenOptions(
-        listenMode: stt.ListenMode.dictation,
-        cancelOnError: true,
-      ),
     );
   }
 

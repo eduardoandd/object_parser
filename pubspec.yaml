@@ -41,12 +41,15 @@ dependencies:
   http: ^1.2.2
   just_audio: ^0.9.42
   audioplayers: ^6.1.0
-  speech_to_text: ^7.0.0
+  speech_to_text: ^6.6.0
   camera: ^0.11.0+2
   picovoice_flutter: ^3.0.4
   porcupine_flutter: ^3.0.4
   record: ^5.2.0
   screenshot: ^3.0.0
+  speech_to_text_ultra: ^0.0.3
+  voice_to_text: ^1.0.3
+  provider: ^6.0.0
 
 dev_dependencies:
   flutter_test:

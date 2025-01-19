@@ -1,88 +1,59 @@
 import 'package:flutter/material.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:voice_to_text/voice_to_text.dart';
 
-class TestePage extends StatefulWidget {
-  const TestePage({super.key});
+class SpeechDemo extends StatefulWidget {
+  const SpeechDemo({Key? key}) : super(key: key);
 
   @override
-  State<TestePage> createState() => _TestePageState();
+  State<SpeechDemo> createState() => _MyHomePageState();
 }
 
-class _TestePageState extends State<TestePage> {
-  late stt.SpeechToText speech;
-  bool isListening = false;
-  String text = '';
-
+class _MyHomePageState extends State<SpeechDemo> {
+  final VoiceToText _speech = VoiceToText(stopFor: 10);
+  String text = ""; //this is optional, I could get the text directly using speechResult
   @override
   void initState() {
-    speech = stt.SpeechToText();
     super.initState();
-  }
-
-  void startListening() async {
-    bool available = await speech.initialize();
-    if (available) {
+    _speech.initSpeech();
+    _speech.addListener(() {
       setState(() {
-        isListening = true;
-        text = ''; // Limpa o texto antes de começar
+        text = _speech.speechResult;
       });
-
-      
-      speech.listen(
-        pauseFor: Duration(seconds: 4),
-        onResult: (result) {
-          setState(() {
-            text = result.recognizedWords;
-          });
-        },
-      );
-
-      speech.statusListener = (status) {
-        if (status == 'notListening') {
-          print('Parando o audio....');
-          
-          
-          setState(() {
-            isListening = false;
-          });
-          checkVoiceCommand(text); 
-        }
-      };
-    }
-  }
-
-  void checkVoiceCommand(String command) {
-    print('Comando detectado: $command');
-    // Adicione sua lógica para tratar o comando aqui
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Teste"),
+        title: const Text('Speech Demo'),
       ),
-      body: Center(
+      body: Container(
+        padding: const EdgeInsets.all(10),
+        alignment: Alignment.center,
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+          textBaseline: TextBaseline.alphabetic,
+          children: <Widget>[
             Text(
-              'Gravar',
-              style: const TextStyle(fontSize: 20),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: isListening ? null : startListening,
-              child: const Text('Começar a Ouvir'),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Texto detectado: $text',
-              style: const TextStyle(fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
+                _speech.isListening
+                    ? "Listening...."
+                    : 'Tap the microphone to start',
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            Text(_speech.isNotListening
+                ? text.isNotEmpty
+                    ? text
+                    : "Try speaking again"
+                : ""),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed:
+            // If not yet listening for speech start, otherwise stop
+            _speech.isNotListening ? _speech.startListening : _speech.stop,
+        tooltip: 'Listen',
+        child: Icon(_speech.isNotListening ? Icons.mic_off : Icons.mic),
       ),
     );
   }
