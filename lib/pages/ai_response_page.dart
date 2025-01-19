@@ -1,6 +1,7 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:object_parser/services/speech_to_text_service.dart';
+import 'package:object_parser/services/upload_service.dart';
 import 'dart:math';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
@@ -17,10 +18,13 @@ class _AiResponsePageState extends State<AiResponsePage> with TickerProviderStat
   late AnimationController _controller;
   late Animation<double> _animation;
   late double _audioPosition;
+  late UploadService _uploadService = UploadService();
+
 
   final double _speedFactor = 0.004;
-  bool _isRecording = false; // Controlar o estado de gravação
-  String _transcribedText = ''; // Texto reconhecido
+  bool isListening =false;
+  String text = '';
+ 
 
   // Instância do serviço de reconhecimento de fala
   late SpeechRecognitionService _speechRecognitionService;
@@ -28,7 +32,7 @@ class _AiResponsePageState extends State<AiResponsePage> with TickerProviderStat
   @override
   void initState() {
     super.initState();
-
+    _uploadService = UploadService();
     _audioPlayer = AudioPlayer();
 
     // Controlador de animação
@@ -63,31 +67,30 @@ class _AiResponsePageState extends State<AiResponsePage> with TickerProviderStat
 
   // Função para iniciar/parar a gravação
   void _toggleRecording() async {
-    if (_isRecording) {
-      _speechRecognitionService.stopListening();
-      setState(() {
-        _isRecording = false;
-      });
-    } else {
-      bool available = await _speechRecognitionService.initialize();
-      if (available) {
-        _speechRecognitionService.startListening(
-          (text) {
-            setState(() {
-              _transcribedText = text;
-            });
-          },
-          () {
-            setState(() {
-              _isRecording = false;
-            });
-          },
-        );
-        setState(() {
-          _isRecording = true;
-        });
-      }
+    await Future.delayed(const Duration(seconds: 1));
+    bool initialized = await _speechRecognitionService.initialize();
+    if(!initialized){
+      print("Falha ao iniciar o reconhecimento de fala");
+      return;
     }
+
+    setState(() {
+      isListening = true;
+      text='';
+    });
+
+    _speechRecognitionService.startListening(
+      (recognizedText) {
+        setState(() {
+          text = recognizedText;
+        });
+      },
+      () async {
+        print("Parando o áudio...");
+        await _uploadService.uploadImageAndText(null, text);
+
+      }
+    );
   }
 
   @override
@@ -129,22 +132,12 @@ class _AiResponsePageState extends State<AiResponsePage> with TickerProviderStat
                   IconButton(
                     onPressed: _toggleRecording, // Iniciar/parar gravação
                     icon: Icon(
-                      _isRecording ? Icons.stop : Icons.mic, // Trocar ícone conforme o estado
+                      isListening ? Icons.stop : Icons.mic, // Trocar ícone conforme o estado
                     ),
                     color: Colors.white,
                     iconSize: 50,
                   ),
                 ],
-              ),
-              SizedBox(height: 20),
-              // Exibir o texto transcrito
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: Text(
-                  _transcribedText,
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                  textAlign: TextAlign.center,
-                ),
               ),
             ],
           ),

@@ -106,6 +106,7 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
   }
 
   _goToAiResponse(String downloadedFilePath) {
+    _porcupineManager.stop();
     if (downloadedFilePath.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("imagem ou audio não reconhecidos!")));
@@ -116,7 +117,12 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
           builder: (context) =>
               AiResponsePage(audioFilePath: downloadedFilePath),
         ),
-      );
+      ).then((_){
+        _porcupineManager.start();
+        setState(() {
+          isListening = false;
+        });
+      });
     }
   }
 
@@ -165,43 +171,6 @@ class _CameraWithVoiceControlState extends State<CameraWithVoiceControl> {
     }
   }
 
-  Future<void> uploadAudioAndImage(File file, String text) async {
-    if (text.isEmpty || file == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("imagem ou audio não reconhecidos!")));
-      return;
-    }
-
-    setState(() {
-      isUploading = true;
-    });
-
-    try {
-      final uri = Uri.parse('http://192.168.0.220:8000/object_img/');
-      var request = http.MultipartRequest('POST', uri);
-      request.files.add(await http.MultipartFile.fromPath('image', file.path));
-      request.fields['text'] = text;
-      final response = await request.send();
-      if (response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Upload realizado com sucesso!")),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Erro no upload: ${response.statusCode}")),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erro ao enviar: $e")),
-      );
-      print(e);
-    } finally {
-      setState(() {
-        isUploading = false;
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

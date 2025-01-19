@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 class UploadService {
   String uploadUrl = 'http://192.168.0.220:8000/object_img/';
 
-  Future<void> uploadImageAndText(File imageFile, String text) async {
+  Future<void> uploadImageAndText(File? imageFile, String text) async {
     if(text.isEmpty){
       print('texto não podem estar vazios');
       return;
